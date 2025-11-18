@@ -1,0 +1,31 @@
+# 字体查询
+查询字体的基本信息,风格分类,用途,输出json
+查询的内容必须严谨,不能出错
+示例:
+
+{
+
+"family": "汉仪尚巍手书 W",
+
+"subfamily": "Regular",
+
+"full_name": "汉仪尚巍手书 W Regular",
+
+"style": "书法体",
+
+"sub_style": "毛笔飞白",
+
+"base_info": "汉仪尚巍手书 W 是汉仪字库推出的一款装饰性书法字体，由 90 后设计师尚巍创作，2016 年 10 月 31 日上线。该字体笔画粗壮，尾部甩尾有力，笔触细节丰富，最大程度还原手写效果，保留毛笔书写的飞白和连笔特征，视觉冲击力强，适合标题和大字展示。",
+
+"charsets": ["CJK", "Latin", "Punctuation", "Numbers"],
+
+"weight": 400,
+
+"copyright": "Copyright © 汉仪字库。保留所有权利。",
+
+"license_desc": "非商业用途需付费授权，商业用途须单独授权",
+
+"license_url": "https://www.hanyi.com.cn/en/license"
+"usage": ["标题", "海报", "广告", "包装设计", "影视制作", "中国风设计"]
+}
+## 只输出json,严禁输出其他额外内容
