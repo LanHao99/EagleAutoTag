@@ -14,6 +14,105 @@ import time
 import shutil
 import re
 
+# 全局标签翻译字典
+translations = {}
+
+# 全局历史标签集合
+history_tags = set()
+
+# 历史标签文件路径
+HISTORY_TAGS_FILE = "history_tags.json"
+
+def load_translations():
+    """加载Tags-zh.csv中的标签翻译字典"""
+    global translations
+    try:
+        # 获取当前脚本所在目录
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        csv_path = os.path.join(script_dir, "Tags-zh.csv")
+        
+        with open(csv_path, "r", encoding="utf-8") as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                if "," not in line:
+                    print(f"警告: CSV第{line_num}行格式错误，缺少逗号")
+                    continue
+                en, zh = map(str.strip, line.split(",", 1))
+                if not en or not zh:
+                    print(f"警告: CSV第{line_num}行存在空字段")
+                    continue
+                translations[en] = zh
+    except Exception as e:
+        print(f"加载翻译文件失败: {e}")
+        translations = {}
+
+def load_history_tags():
+    """加载历史标签记录"""
+    global history_tags
+    try:
+        # 获取当前脚本所在目录
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        history_file = os.path.join(script_dir, HISTORY_TAGS_FILE)
+        
+        if os.path.exists(history_file):
+            with open(history_file, "r", encoding="utf-8") as f:
+                history_tags = set(json.load(f))
+    except Exception as e:
+        print(f"加载历史标签失败: {e}")
+        history_tags = set()
+
+def save_history_tags():
+    """保存历史标签记录"""
+    try:
+        # 获取当前脚本所在目录
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        history_file = os.path.join(script_dir, HISTORY_TAGS_FILE)
+        
+        with open(history_file, "w", encoding="utf-8") as f:
+            json.dump(list(history_tags), f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"保存历史标签失败: {e}")
+
+def update_history_tags(new_tags):
+    """更新历史标签记录"""
+    global history_tags
+    if not isinstance(new_tags, list):
+        return
+    
+    # 清理和筛选有效的标签
+    valid_tags = []
+    for tag in new_tags:
+        if isinstance(tag, str):
+            cleaned_tag = clean_tag(tag)
+            if cleaned_tag and not is_bad_tag(cleaned_tag):
+                valid_tags.append(cleaned_tag)
+    
+    # 如果有有效的标签，更新历史记录
+    if valid_tags:
+        import random
+        
+        # 计算要添加的标签数量
+        add_count = len(valid_tags)
+        
+        # 随机删除相同数量的标签（如果历史标签数量足够）
+        if len(history_tags) >= add_count:
+            # 将集合转换为列表以支持random.sample
+            tags_to_remove = random.sample(list(history_tags), add_count)
+            for tag in tags_to_remove:
+                history_tags.remove(tag)
+        
+        # 添加新的标签
+        history_tags.update(valid_tags)
+        
+        # 保存更新后的历史记录
+        save_history_tags()
+
+# 初始化标签翻译字典和历史标签
+load_translations()
+load_history_tags()
+
 def read_json(path: str):
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -34,7 +133,7 @@ def read_json(path: str):
 
 def write_json(path: str, obj):
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=2)
+        json.dump(obj, f, ensure_ascii=False)
 
 def read_text(path: str):
     try:
@@ -266,6 +365,10 @@ def update_font_metadata(font_path: str, out_text: str, rules: dict):
         before_obj["tags"] = merged
     write_json(meta_path, before_obj)
     final_tags = before_obj.get("tags") if isinstance(before_obj.get("tags"), list) else []
+    
+    # 更新历史标签记录
+    update_history_tags(final_tags)
+    
     return meta_path, existing_clean, final_tags
 
 def get_clipboard_text():
@@ -396,6 +499,8 @@ def check_service_with_retry(base_url: str, timeout: float, retries: int, delay:
 def clean_tag(s: str):
     s = s.strip().strip('"').strip("'")
     s = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", s)
+    # 删除异常符号：+，！，/，\，@，#，* 等
+    s = re.sub(r"[+!\/\\@#*]", "", s)
     s = s.replace("\r", " ").replace("\n", " ")
     s = " ".join(s.split())
     return s
@@ -477,9 +582,11 @@ def dedup_tags(items):
         s = clean_tag(x)
         if not s or is_bad_tag(s):
             continue
-        if s not in seen:
-            seen.add(s)
-            result.append(s)
+        # 翻译标签，如果在翻译字典中存在
+        translated_tag = translations.get(s, s)
+        if translated_tag not in seen:
+            seen.add(translated_tag)
+            result.append(translated_tag)
     return result
 
 def parse_output_to_tags(text: str):
@@ -564,6 +671,10 @@ def update_tags_json(image_path: str, new_text: str, rules: dict):
         obj["tags"] = merged
     write_json(p, obj)
     final_tags = obj.get("tags") if isinstance(obj.get("tags"), list) else []
+    
+    # 更新历史标签记录
+    update_history_tags(final_tags)
+    
     return p, existing_clean, final_tags
 
 def extract_tags_from_text(text: str):
@@ -705,11 +816,26 @@ def main():
     if cfg.get("max_tokens"):
         extras["max_tokens"] = cfg["max_tokens"]
     paths = []
-    if args.paths:
-        paths = parse_paths("\n".join(args.paths))
-    else:
-        text = get_clipboard_text()
-        paths = parse_paths(text)
+    text = get_clipboard_text()
+    paths = parse_paths(text)
+    
+    # 处理目录路径，查找其中的图片文件
+    processed_paths = []
+    for p in paths:
+        if os.path.isdir(p):
+            # 如果是目录，查找其中的图片文件
+            for file in os.listdir(p):
+                file_path = os.path.join(p, file)
+                if os.path.isfile(file_path):
+                    ext = os.path.splitext(file_path)[1].lower()
+                    if ext in [
+                        ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".avif", ".heic", ".ico"
+                    ]:
+                        processed_paths.append(file_path)
+        else:
+            processed_paths.append(p)
+    
+    paths = processed_paths
     if not paths:
         print("剪贴板未检测到有效路径")
         sys.exit(2)
@@ -842,6 +968,10 @@ def main():
                     "attempts": attempts,
                     "cost_seconds": round(item_cost, 3)
                 })
+                
+                # 更新历史标签记录
+                update_history_tags(incoming_tags)
+                
                 continue
             d = os.path.dirname(p)
             meta_path = os.path.join(d, "metadata.json")

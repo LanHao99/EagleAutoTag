@@ -223,6 +223,26 @@ def main():
         system_prompt = args.system
         if args.template_file:
             tpl = read_text_file(args.template_file)
+            
+            # 尝试读取历史标签并插入到模板中
+            history_tags_path = "history_tags.json"
+            if os.path.exists(history_tags_path):
+                try:
+                    history_tags = read_json_file(history_tags_path)
+                    if history_tags:
+                        # 找到模板中需要插入标签库的位置
+                        tag_lib_marker = "请优先使用标签库中存在的中文标签，确保生成的标签能够在标签库中找到："
+                        if tag_lib_marker in tpl:
+                            # 在标签库标记后插入历史标签
+                            tpl_parts = tpl.split(tag_lib_marker)
+                            if len(tpl_parts) == 2:
+                                # 构建标签库内容
+                                tags_content = "\n\n" + ",\n".join(history_tags[:1000]) + "\n\n"
+                                # 重新组合模板
+                                tpl = tpl_parts[0] + tag_lib_marker + tags_content + tpl_parts[1]
+                except Exception as e:
+                    print(f"读取历史标签失败：{e}", file=sys.stderr)
+            
             if args.mode == "chat":
                 system_prompt = tpl + ("\n\n" + system_prompt if system_prompt else "")
             else:
