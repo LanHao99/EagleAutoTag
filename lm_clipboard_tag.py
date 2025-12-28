@@ -93,18 +93,17 @@ def update_history_tags(new_tags):
     if valid_tags:
         import random
         
-        # 计算要添加的标签数量
-        add_count = len(valid_tags)
-        
-        # 随机删除相同数量的标签（如果历史标签数量足够）
-        if len(history_tags) >= add_count:
-            # 将集合转换为列表以支持random.sample
-            tags_to_remove = random.sample(list(history_tags), add_count)
-            for tag in tags_to_remove:
-                history_tags.remove(tag)
-        
         # 添加新的标签
         history_tags.update(valid_tags)
+        
+        # 如果历史标签数量超过5000，随机删除多余的标签
+        MAX_TAGS = 5000
+        if len(history_tags) > MAX_TAGS:
+            excess = len(history_tags) - MAX_TAGS
+            # 随机删除多余的标签
+            tags_to_remove = random.sample(list(history_tags), excess)
+            for tag in tags_to_remove:
+                history_tags.remove(tag)
         
         # 保存更新后的历史记录
         save_history_tags()
@@ -711,17 +710,35 @@ def parse_paths(text: str):
             continue
         ext = os.path.splitext(s)[1].lower()
         if os.path.isfile(s):
-            if ext in [
-                ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".avif", ".heic", ".ico",
-                ".ttf", ".otf", ".ttc", ".woff", ".woff2"
-            ]:
-                items.append(s)
+            # 支持所有存在的文件格式
+            items.append(s)
         else:
             if ext in [
                 ".ttf", ".otf", ".ttc", ".woff", ".woff2"
             ]:
                 items.append(s)
     return items
+
+def find_thumbnail(file_path: str):
+    """在给定文件的路径下查找名称包含thumbnail的图片"""
+    # 获取文件所在目录
+    dir_path = os.path.dirname(file_path)
+    
+    # 定义支持的图片扩展名
+    image_exts = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".avif", ".heic", ".ico"]
+    
+    # 遍历目录下的所有文件
+    for file_name in os.listdir(dir_path):
+        # 检查文件名是否包含thumbnail（不区分大小写）
+        if "thumbnail" in file_name.lower():
+            # 检查文件是否是图片格式
+            ext = os.path.splitext(file_name)[1].lower()
+            if ext in image_exts:
+                # 返回完整的文件路径
+                return os.path.join(dir_path, file_name)
+    
+    # 如果没有找到匹配的文件，返回None
+    return None
 
 def load_config(path: str):
     cfg = read_json(path) or {}
@@ -861,6 +878,16 @@ def main():
             usage = None
             ext = os.path.splitext(p)[1].lower()
             remote = p.startswith("http://") or p.startswith("https://")
+            
+            # 检查是否为已知格式
+            known_extensions = [".ttf", ".otf", ".ttc", ".woff", ".woff2", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".avif", ".heic", ".ico"]
+            
+            # 对于其他格式文件，查找是否存在thumbnail图片
+            thumbnail_path = None
+            if ext not in known_extensions and not remote:
+                thumbnail_path = find_thumbnail(p)
+                print(f"检测到其他格式文件: {p}，查找thumbnail图片: {'找到' if thumbnail_path else '未找到'}")
+            
             if ext in [".ttf", ".otf", ".ttc", ".woff", ".woff2"]:
                 data_url = ""
             else:
@@ -873,7 +900,11 @@ def main():
                     else:
                         data_url = p
                 else:
-                    data_url = image_to_data_url(p)
+                    # 如果存在thumbnail图片，使用thumbnail图片生成data_url
+                    if thumbnail_path:
+                        data_url = image_to_data_url(thumbnail_path)
+                    else:
+                        data_url = image_to_data_url(p)
             if ext not in [".ttf", ".otf", ".ttc", ".woff", ".woff2"]:
                 mname = (cfg_effective.get("model") or "").strip()
                 prov = (cfg_effective.get("provider") or "").strip().lower()
