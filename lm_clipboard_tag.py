@@ -879,6 +879,18 @@ def main():
             ext = os.path.splitext(p)[1].lower()
             remote = p.startswith("http://") or p.startswith("https://")
             
+            # 检查当前标签是否为空（只检查本地文件）
+            if not remote:
+                d = os.path.dirname(p)
+                meta_path = os.path.join(d, "metadata.json")
+                before_obj = read_json(meta_path) or {}
+                before_tags = before_obj.get("tags")
+                if isinstance(before_tags, list) and len(before_tags) > 0:
+                    print(f"[{idx}/{total}] 跳过已有标签的文件: {p}")
+                    if args.sleep > 0:
+                        time.sleep(float(args.sleep))
+                    continue
+            
             # 检查是否为已知格式
             known_extensions = [".ttf", ".otf", ".ttc", ".woff", ".woff2", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".avif", ".heic", ".ico"]
             
